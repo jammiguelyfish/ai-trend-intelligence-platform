@@ -152,14 +152,6 @@ ai-trend-intelligence-platform/
 └── README.md
 ```
 
----
-
-## Screenshots
-
-> _Add screenshots of the dashboard / trend explorer / search page here._
-
----
-
 ## Future Improvements
 
 - Real-time websocket updates

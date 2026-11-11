@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 from tenacity import (
     AsyncRetrying,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -16,6 +16,14 @@ from backend.app.config import settings
 from backend.app.utils.logging import get_logger
 
 log = get_logger(__name__)
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Retry network errors, 429 and 5xx; a 4xx like 403 will not fix itself."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        return code == 429 or code >= 500
+    return isinstance(exc, httpx.HTTPError)
 
 
 class HttpClient:
@@ -38,9 +46,7 @@ class HttpClient:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(4),
             wait=wait_exponential(min=1, max=10),
-            retry=retry_if_exception_type(
-                (httpx.HTTPError, httpx.TimeoutException)
-            ),
+            retry=retry_if_exception(_is_retryable),
             reraise=True,
         ):
             with attempt:

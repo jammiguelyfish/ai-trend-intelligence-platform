@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import List
 
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.models import Trend
@@ -12,6 +12,10 @@ from backend.app.models import Trend
 async def list_trends(
     session: AsyncSession, bucket: str | None = None, limit: int = 50
 ) -> List[dict]:
+    # No bucket means "today": the latest day, not every day mixed together
+    # (which would list the same term once per day).
+    if not bucket:
+        bucket = (await session.execute(select(func.max(Trend.bucket)))).scalar_one_or_none()
     q = select(Trend)
     if bucket:
         q = q.where(Trend.bucket == bucket)

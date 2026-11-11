@@ -1,11 +1,13 @@
 """Simple keyword-based trend detection over time buckets."""
 from __future__ import annotations
 
+import html
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,21 +17,37 @@ from backend.app.utils.logging import get_logger
 log = get_logger(__name__)
 
 _TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9\-+#\.]{2,}")
-_STOP = {
-    "the", "and", "for", "with", "from", "this", "that", "you", "are",
-    "was", "but", "have", "has", "not", "your", "our", "their", "they",
-    "about", "into", "out", "use", "using", "used", "will", "can",
-    "more", "most", "new", "any", "all", "one", "two", "get", "got",
-    "how", "why", "what", "when", "who", "where", "show", "hn", "ask",
+_TAG = re.compile(r"<[^>]+>")
+_URL = re.compile(r"https?://\S+|www\.\S+")
+
+# General English stopwords (minus two words that matter in tech text) plus
+# filler that is frequent in arXiv / HN text but says nothing about trends.
+_STOP = (set(ENGLISH_STOP_WORDS) - {"system", "computer"}) | {
+    "hn", "ask", "use", "using", "used", "get", "got", "new",
+    "paper", "propose", "proposed", "present", "approach", "based", "via",
+    "results", "work", "method", "methods", "novel", "http", "https", "www",
+    "com",
+    # conversational filler from Reddit / HN comments
+    "like", "just", "don", "doesn", "didn", "isn", "way", "lot", "know",
+    "really", "want", "need", "think", "make", "thing", "things", "people",
+    "good", "better", "going", "time",
 }
 
 
+def _clean(text: str) -> str:
+    """Strip markup, HTML entities and URLs so '&#x2F;' or 'https' never count."""
+    text = _TAG.sub(" ", text or "")
+    text = html.unescape(html.unescape(text))
+    return _URL.sub(" ", text)
+
+
 def _tokens(text: str) -> List[str]:
-    return [
-        t.lower()
-        for t in _TOKEN.findall(text or "")
-        if t.lower() not in _STOP and len(t) > 2
-    ]
+    out: List[str] = []
+    for t in _TOKEN.findall(_clean(text)):
+        t = t.lower().rstrip(".-")
+        if len(t) > 2 and t not in _STOP:
+            out.append(t)
+    return out
 
 
 def _bucket_day(dt: datetime) -> str:

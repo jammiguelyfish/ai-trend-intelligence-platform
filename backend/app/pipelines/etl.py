@@ -60,6 +60,18 @@ async def ingest_items(
         if exists.scalar_one_or_none():
             continue
 
+        # The table is unique on (source, external_id). Titles and bodies get
+        # edited upstream (e.g. Hacker News renames), which changes the hash,
+        # so an already-stored item must be skipped here as well.
+        seen = await session.execute(
+            select(Document.id).where(
+                Document.source_id == src.id,
+                Document.external_id == item.external_id,
+            )
+        )
+        if seen.scalar_one_or_none():
+            continue
+
         doc = Document(
             source_id=src.id,
             external_id=item.external_id,

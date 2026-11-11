@@ -20,6 +20,14 @@ A 100% free, locally-runnable, full-stack AI platform that scrapes developer/AI 
 
 ---
 
+## Screenshots
+
+Semantic search over scraped arXiv / Hacker News / GitHub items, with an on-demand local LLM summary (Ollama):
+
+![Semantic search with a local LLM summary](docs/images/search.png)
+
+---
+
 ## Architecture
 
 ```

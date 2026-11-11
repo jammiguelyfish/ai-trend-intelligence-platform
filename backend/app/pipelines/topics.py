@@ -17,6 +17,26 @@ from backend.app.utils.logging import get_logger
 log = get_logger(__name__)
 
 
+def cluster_embeddings(X: np.ndarray, min_cluster_size: int = 5) -> np.ndarray:
+    """Cluster unit-norm embeddings with HDBSCAN; returns labels (-1 = noise).
+
+    HDBSCAN on raw 384-d embeddings finds no density structure on small corpora
+    (everything is noise), so reduce to a few PCA dimensions first and scale
+    ``min_cluster_size`` down for small inputs.
+    """
+    import hdbscan
+    from sklearn.decomposition import PCA
+
+    n = len(X)
+    dims = min(10, n - 1, X.shape[1])
+    Z = PCA(n_components=dims, random_state=0).fit_transform(X) if dims >= 2 else X
+    size = max(3, min(min_cluster_size, n // 25))
+    clusterer = hdbscan.HDBSCAN(
+        min_cluster_size=size, min_samples=2, metric="euclidean"
+    )
+    return clusterer.fit_predict(Z.astype(np.float64))
+
+
 async def cluster_topics(
     session: AsyncSession, max_docs: int = 1000, min_cluster_size: int = 5
 ) -> List[Topic]:
@@ -36,12 +56,7 @@ async def cluster_topics(
     texts = [f"{d.title}\n{d.content or ''}" for d in docs]
     X = embed_texts(texts)
 
-    import hdbscan
-
-    clusterer = hdbscan.HDBSCAN(
-        min_cluster_size=min_cluster_size, metric="euclidean"
-    )
-    labels = clusterer.fit_predict(X.astype(np.float64))
+    labels = cluster_embeddings(X, min_cluster_size)
 
     # reset topic data
     await session.execute(delete(DocumentTopic))

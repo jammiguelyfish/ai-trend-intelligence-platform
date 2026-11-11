@@ -8,7 +8,7 @@ A 100% free, locally-runnable, full-stack AI platform that scrapes developer/AI 
 
 ## Features
 
-- **Multi-source scraping**: Reddit JSON, Hacker News API, GitHub Trending, arXiv
+- **Multi-source scraping**: Reddit (JSON, with Atom-feed fallback), Hacker News API, GitHub Trending, arXiv
 - **ETL pipeline**: raw → cleaned → deduplicated → normalized
 - **Local embeddings**: `sentence-transformers/all-MiniLM-L6-v2`
 - **Vector search**: ChromaDB
@@ -22,7 +22,15 @@ A 100% free, locally-runnable, full-stack AI platform that scrapes developer/AI 
 
 ## Screenshots
 
-Semantic search over scraped arXiv / Hacker News / GitHub items, with an on-demand local LLM summary (Ollama):
+**Overview** — pipeline status, active topics and the day's trending terms:
+
+![Overview dashboard](docs/images/overview.png)
+
+**Topics** — HDBSCAN clusters over local embeddings, labelled with their top keywords:
+
+![Topic clusters](docs/images/topics.png)
+
+**Semantic search** with an on-demand local LLM summary (Ollama):
 
 ![Semantic search with a local LLM summary](docs/images/search.png)
 

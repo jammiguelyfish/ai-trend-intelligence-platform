@@ -1,5 +1,7 @@
 # AI Developer Trends Intelligence Platform
 
+[![CI](https://github.com/jammiguelyfish/ai-trend-intelligence-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/jammiguelyfish/ai-trend-intelligence-platform/actions/workflows/ci.yml)
+
 A 100% free, locally-runnable, full-stack AI platform that scrapes developer/AI signals from across the web, transforms them into a clean structured corpus, generates **local** embeddings, performs **semantic search**, detects **trending topics**, and produces **AI summaries** using **Ollama** — all served through a FastAPI backend and a modern React dashboard.
 
 > No paid APIs. No OpenAI. No proprietary services. Everything runs locally or via free public endpoints.

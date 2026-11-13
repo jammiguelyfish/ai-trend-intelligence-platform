@@ -36,6 +36,7 @@ _STOP = (set(ENGLISH_STOP_WORDS) - {"system", "computer"}) | {
     "leverages", "exhibits", "demonstrate", "demonstrates", "show", "shows",
     "achieve", "achieves", "single", "real", "run", "runs", "description",
     "semantically", "pass", "average", "existing", "recent", "different",
+    "year", "tried", "write", "wrote", "sure", "state", "point",
 }
 
 
@@ -116,7 +117,9 @@ async def compute_daily_trends(
         if not d.published_at:
             continue
         b = _bucket_day(d.published_at)
-        counts.setdefault(b, Counter()).update(_terms(f"{d.title} {d.content or ''}"))
+        # Count documents, not occurrences: one long thread that says "prefill"
+        # forty times is one story, not a trend.
+        counts.setdefault(b, Counter()).update(set(_terms(f"{d.title} {d.content or ''}")))
 
     # wipe day buckets we recompute
     await session.execute(delete(Trend).where(Trend.bucket.in_(list(counts.keys()))))
@@ -127,7 +130,7 @@ async def compute_daily_trends(
         # Compare with the average of up to a week of earlier days instead of
         # just yesterday, so one quiet day doesn't make everything "rising".
         window = [counts[x] for x in buckets_sorted[max(0, i - 7):i]]
-        kept = _prune_subsumed(counts[b])
+        kept = Counter({x: c for x, c in _prune_subsumed(counts[b]).items() if c >= 2})
         # Phrases are rarer than single words, so rank the two kinds separately
         # or they would never reach the list.
         words = [(x, c) for x, c in kept.most_common() if " " not in x][: top_k * 3 // 5]

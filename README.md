@@ -13,7 +13,7 @@ A 100% free, locally-runnable, full-stack AI platform that scrapes developer/AI 
 - **Local embeddings**: `sentence-transformers/all-MiniLM-L6-v2`
 - **Vector search**: ChromaDB
 - **Local LLM summaries**: Ollama (`llama3` / `mistral`)
-- **Trend detection**: time-bucketed frequency deltas + optional HDBSCAN clustering
+- **Trend detection**: time-bucketed term and phrase frequencies compared against a 7-day baseline, plus k-means topic clustering
 - **REST API**: FastAPI + Swagger
 - **Dashboard**: React + Vite + Tailwind + Recharts
 - **Production layout**: Docker, docker-compose, Alembic migrations, structured logging
@@ -26,7 +26,7 @@ A 100% free, locally-runnable, full-stack AI platform that scrapes developer/AI 
 
 ![Overview dashboard](docs/images/overview.png)
 
-**Topics** — HDBSCAN clusters over local embeddings, labelled with their top keywords:
+**Topics** — k-means clusters over local embeddings, each with its most representative headlines and distinctive keywords:
 
 ![Topic clusters](docs/images/topics.png)
 

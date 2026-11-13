@@ -14,16 +14,15 @@ def _blobs(groups=3, per_group=20, dim=384, noise=0.15, seed=0):
 
 
 def test_cluster_embeddings_separates_distinct_groups():
-    labels = cluster_embeddings(_blobs(), min_cluster_size=5)
-    found = set(labels) - {-1}
-    assert len(found) >= 2
+    labels = cluster_embeddings(_blobs(), docs_per_topic=20)
+    assert len(set(labels)) == 3
     # points from the same generated group should mostly share a label
     first = labels[:20]
-    assert (first == np.bincount(first[first >= 0]).argmax()).sum() >= 15
+    assert (first == np.bincount(first).argmax()).sum() == 20
 
 
 def test_cluster_embeddings_handles_tiny_input():
-    labels = cluster_embeddings(_blobs(groups=1, per_group=6), min_cluster_size=5)
+    labels = cluster_embeddings(_blobs(groups=1, per_group=6))
     assert len(labels) == 6
 
 
@@ -39,3 +38,13 @@ def test_label_clusters_prefers_distinctive_phrases_over_common_words():
     assert "diffusion model" in kw[0] or "image generation" in kw[0]
     assert "model" not in kw[0][:2]  # shared by every doc, so not distinctive
     assert any("agents" in k or "llm" in k for k in kw[1][:3])
+
+
+def test_centroid_scores_rank_central_points_first_and_ignore_noise():
+    from backend.app.pipelines.topics import centroid_scores
+
+    X = np.array([[1.0, 0.0], [0.99, 0.14], [0.8, 0.6], [0.0, 1.0]])
+    X /= np.linalg.norm(X, axis=1, keepdims=True)
+    s = centroid_scores(X, [0, 0, 0, -1])
+    assert s[3] == 0.0
+    assert s[1] > s[0] and s[1] > s[2]  # middle point is closest to the centre

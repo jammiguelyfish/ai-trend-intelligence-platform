@@ -28,9 +28,9 @@ async def main() -> None:
     log.info("pipeline.scrape")
     batches = await asyncio.gather(
         scrape_reddit(),
-        scrape_hackernews(limit=50),
+        scrape_hackernews(limit=150),
         scrape_github_trending(),
-        scrape_arxiv(max_results=40),
+        scrape_arxiv(max_results=200),
         return_exceptions=True,
     )
     items = list(

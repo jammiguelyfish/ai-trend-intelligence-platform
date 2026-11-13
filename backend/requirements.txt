@@ -27,7 +27,6 @@ sentence-transformers==3.0.1
 transformers==4.44.2
 torch==2.4.0
 chromadb==0.5.5
-hdbscan==0.8.40
 scikit-learn==1.5.1
 
 # --- Utils ---

@@ -37,6 +37,7 @@ export interface TopicItem {
   label: string;
   keywords: string[];
   size: number;
+  examples: { id: number; title: string; url: string | null }[];
 }
 
 export const api = {

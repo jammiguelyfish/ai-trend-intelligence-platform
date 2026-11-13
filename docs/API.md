@@ -24,7 +24,7 @@ Top terms for a day bucket (omit `bucket` to get most-trending across all bucket
 List available day buckets, newest first.
 
 ### GET `/topics`
-List HDBSCAN clusters with label, keywords, and size.
+List k-means topics with label, keywords, size, and the 3 most representative documents.
 
 ### POST `/summary`
 ```json

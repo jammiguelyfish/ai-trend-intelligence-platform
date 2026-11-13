@@ -54,3 +54,43 @@ async def _phrase_run():
 
 def test_phrases_outrank_generic_words_with_a_similar_rise():
     assert [r["term"] for r in asyncio.run(_phrase_run())][0] == "foundation model"
+
+
+async def _df_run():
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from backend.app.pipelines.etl import ingest_items
+    from backend.app.pipelines.trends import compute_daily_trends
+    from backend.app.scraping.schemas import RawItem
+
+    now = datetime.now(timezone.utc)
+
+    def item(i, text):
+        return RawItem(source="hackernews", external_id=str(i), title=text, content="", published_at=now)
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as s:
+        await ingest_items(
+            s,
+            [
+                item(1, "prefill " * 20 + "decode"),
+                item(2, "agents everywhere"),
+                item(3, "building agents"),
+            ],
+        )
+    async with Session() as s:
+        await compute_daily_trends(s)
+        rows = {r.term: r.count for r in (await s.execute(select(Trend))).scalars().all()}
+    await engine.dispose()
+    return rows
+
+
+def test_terms_are_counted_once_per_document_and_need_two_documents():
+    rows = asyncio.run(_df_run())
+    assert rows.get("agent") == 2
+    assert "prefill" not in rows  # 20 mentions, but in a single document

@@ -1,4 +1,4 @@
-"""Topic clustering using HDBSCAN over recent document embeddings."""
+"""Topic clustering with k-means over recent document embeddings."""
 from __future__ import annotations
 
 import math
@@ -18,24 +18,25 @@ from backend.app.utils.logging import get_logger
 log = get_logger(__name__)
 
 
-def cluster_embeddings(X: np.ndarray, min_cluster_size: int = 5) -> np.ndarray:
-    """Cluster unit-norm embeddings with HDBSCAN; returns labels (-1 = noise).
+def cluster_embeddings(
+    X: np.ndarray, docs_per_topic: int = 50, max_topics: int = 20
+) -> np.ndarray:
+    """Group unit-norm embeddings into topics with k-means; returns a label per row.
 
-    HDBSCAN on raw 384-d embeddings finds no density structure on small corpora
-    (everything is noise), so reduce to a few PCA dimensions first and scale
-    ``min_cluster_size`` down for small inputs.
+    Density clustering (HDBSCAN) was tried first and does not suit this data:
+    on ~700 mixed AI/dev posts it put 80% of them in one blob, or, tuned finer,
+    marked 70% as noise. K-means assigns every document and yields readable
+    topics. The silhouette score is flat across k here (~0.08), so it cannot
+    pick k; one topic per ``docs_per_topic`` documents is used instead.
     """
-    import hdbscan
+    from sklearn.cluster import KMeans
     from sklearn.decomposition import PCA
 
     n = len(X)
-    dims = min(10, n - 1, X.shape[1])
+    k = max(2, min(max_topics, round(n / docs_per_topic), n))
+    dims = min(30, n - 1, X.shape[1])
     Z = PCA(n_components=dims, random_state=0).fit_transform(X) if dims >= 2 else X
-    size = max(3, min(min_cluster_size, n // 25))
-    clusterer = hdbscan.HDBSCAN(
-        min_cluster_size=size, min_samples=2, metric="euclidean"
-    )
-    return clusterer.fit_predict(Z.astype(np.float64))
+    return KMeans(n_clusters=k, n_init=10, random_state=0).fit_predict(Z)
 
 
 def label_clusters(
@@ -71,8 +72,23 @@ def label_clusters(
     return out
 
 
+def centroid_scores(X: np.ndarray, labels: Sequence[int]) -> np.ndarray:
+    """Cosine similarity of each document to its cluster centre (0 for noise).
+
+    Used to pick the headlines that best represent a topic.
+    """
+    labels = np.asarray(labels)
+    scores = np.zeros(len(labels))
+    for cid in set(labels.tolist()) - {-1}:
+        idx = np.where(labels == cid)[0]
+        centre = X[idx].mean(axis=0)
+        centre /= np.linalg.norm(centre) or 1.0
+        scores[idx] = X[idx] @ centre
+    return scores
+
+
 async def cluster_topics(
-    session: AsyncSession, max_docs: int = 1000, min_cluster_size: int = 5
+    session: AsyncSession, max_docs: int = 1000, min_docs: int = 10
 ) -> List[Topic]:
     docs = list(
         (
@@ -83,27 +99,28 @@ async def cluster_topics(
         .scalars()
         .all()
     )
-    if len(docs) < min_cluster_size:
+    if len(docs) < min_docs:
         log.info("topics.too_few", n=len(docs))
         return []
 
     texts = [f"{d.title}\n{d.content or ''}" for d in docs]
     X = embed_texts(texts)
 
-    labels = cluster_embeddings(X, min_cluster_size)
+    labels = cluster_embeddings(X)
 
     # reset topic data
     await session.execute(delete(DocumentTopic))
     await session.execute(delete(Topic))
 
     doc_terms = [_terms(t) for t in texts]
+    sims = centroid_scores(X, labels)
     keywords_by_cluster = label_clusters(doc_terms, labels)
 
     out: List[Topic] = []
     for cid in sorted(set(labels)):
         if cid == -1:
             continue
-        members = [d for d, l in zip(docs, labels) if l == cid]
+        members = [(d, float(s)) for d, l, s in zip(docs, labels, sims) if l == cid]
         keywords = keywords_by_cluster.get(cid, [])
         label = ", ".join(keywords[:3]) or f"topic-{cid}"
         topic = Topic(
@@ -113,8 +130,8 @@ async def cluster_topics(
         )
         session.add(topic)
         await session.flush()
-        for m in members:
-            session.add(DocumentTopic(document_id=m.id, topic_id=topic.id, score=1.0))
+        for m, s in members:
+            session.add(DocumentTopic(document_id=m.id, topic_id=topic.id, score=s))
         out.append(topic)
 
     await session.commit()

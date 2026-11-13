@@ -13,6 +13,17 @@ export default function Topics() {
       {topics.map((t) => (
         <Card key={t.id} title={t.label}>
           <div className="text-xs text-slate-500 mb-2">{t.size} documents</div>
+          <ul className="mb-3 space-y-1 text-sm text-slate-700">
+            {t.examples.map((e) => (
+              <li key={e.id} className="line-clamp-2">
+                {e.url ? (
+                  <a href={e.url} target="_blank" rel="noreferrer" className="hover:underline">{e.title}</a>
+                ) : (
+                  e.title
+                )}
+              </li>
+            ))}
+          </ul>
           <div className="flex flex-wrap gap-1">
             {t.keywords.map((k) => (
               <span key={k} className="text-xs bg-brand-50 text-brand-700 rounded px-2 py-0.5">{k}</span>

@@ -20,7 +20,7 @@ This document describes the high-level architecture of the **AI Developer Trends
    Daily term-frequency buckets, with deltas vs the previous bucket.
 
 5. **Topics** (`backend/app/pipelines/topics.py`)
-   HDBSCAN clustering over recent embeddings; top keywords are used as labels.
+   k-means clustering over recent embeddings; topics are labelled with their most distinctive terms (TF-IDF across clusters).
 
 6. **AI summaries** (`backend/app/ai/ollama.py`)
    Async client against a locally running Ollama daemon (`llama3` by default).

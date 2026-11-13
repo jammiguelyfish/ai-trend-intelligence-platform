@@ -1,8 +1,9 @@
 """Topic clustering using HDBSCAN over recent document embeddings."""
 from __future__ import annotations
 
+import math
 from collections import Counter
-from typing import List
+from typing import Dict, List, Sequence
 
 import numpy as np
 from sqlalchemy import select, delete
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.embeddings import store
 from backend.app.embeddings.model import embed_texts
 from backend.app.models import Document, DocumentTopic, Topic
-from backend.app.pipelines.trends import _tokens
+from backend.app.pipelines.trends import _prune_subsumed, _terms
 from backend.app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -35,6 +36,39 @@ def cluster_embeddings(X: np.ndarray, min_cluster_size: int = 5) -> np.ndarray:
         min_cluster_size=size, min_samples=2, metric="euclidean"
     )
     return clusterer.fit_predict(Z.astype(np.float64))
+
+
+def label_clusters(
+    doc_terms: Sequence[Sequence[str]], labels: Sequence[int], top_n: int = 8
+) -> Dict[int, List[str]]:
+    """Distinctive keywords per cluster (TF-IDF over clusters).
+
+    A term scores high when it appears in many documents of the cluster but in
+    few documents overall, so corpus-wide words ("model") lose to what actually
+    sets the cluster apart ("diffusion model", "image generation").
+    """
+    n = len(doc_terms)
+    global_df: Counter = Counter()
+    for terms in doc_terms:
+        global_df.update(set(terms))
+
+    out: Dict[int, List[str]] = {}
+    for cid in sorted(set(labels) - {-1}):
+        members = [t for t, l in zip(doc_terms, labels) if l == cid]
+        df: Counter = Counter()
+        for terms in members:
+            df.update(set(terms))
+        need = max(2, min(len(members) // 5, 4))
+        scored = Counter(
+            {
+                term: (c / len(members)) * math.log(1 + n / global_df[term])
+                for term, c in df.items()
+                if c >= need
+            }
+        )
+        kept = _prune_subsumed(scored, min_phrase=0)
+        out[cid] = [w for w, _ in kept.most_common(top_n)]
+    return out
 
 
 async def cluster_topics(
@@ -62,15 +96,15 @@ async def cluster_topics(
     await session.execute(delete(DocumentTopic))
     await session.execute(delete(Topic))
 
+    doc_terms = [_terms(t) for t in texts]
+    keywords_by_cluster = label_clusters(doc_terms, labels)
+
     out: List[Topic] = []
     for cid in sorted(set(labels)):
         if cid == -1:
             continue
         members = [d for d, l in zip(docs, labels) if l == cid]
-        kw_counter: Counter = Counter()
-        for m in members:
-            kw_counter.update(_tokens(f"{m.title} {m.content or ''}"))
-        keywords = [w for w, _ in kw_counter.most_common(8)]
+        keywords = keywords_by_cluster.get(cid, [])
         label = ", ".join(keywords[:3]) or f"topic-{cid}"
         topic = Topic(
             label=label[:256],

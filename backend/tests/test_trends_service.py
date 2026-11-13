@@ -32,3 +32,25 @@ def test_default_is_latest_day_and_explicit_bucket_still_works():
     assert {r["bucket"] for r in latest} == {"2026-11-10"}
     assert [r["term"] for r in latest] == ["agents", "models"]
     assert [r["term"] for r in explicit] == ["models"]
+
+
+async def _phrase_run():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as s:
+        s.add_all(
+            [
+                Trend(bucket="2026-11-10", term="model", count=60, delta=40.0),
+                Trend(bucket="2026-11-10", term="foundation model", count=25, delta=24.0),
+            ]
+        )
+        await s.commit()
+        rows = await list_trends(s)
+    await engine.dispose()
+    return rows
+
+
+def test_phrases_outrank_generic_words_with_a_similar_rise():
+    assert [r["term"] for r in asyncio.run(_phrase_run())][0] == "foundation model"

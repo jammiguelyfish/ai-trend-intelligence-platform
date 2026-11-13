@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import List
 
-from sqlalchemy import select, desc, func
+from sqlalchemy import case, select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.models import Trend
@@ -19,7 +19,10 @@ async def list_trends(
     q = select(Trend)
     if bucket:
         q = q.where(Trend.bucket == bucket)
-    q = q.order_by(desc(Trend.delta), desc(Trend.count)).limit(limit)
+    # A two-word phrase says more per mention than a single word and is rarer,
+    # so weight it up; otherwise generic words like "model" always win.
+    weight = case((Trend.term.like("% %"), 2.0), else_=1.0)
+    q = q.order_by(desc(Trend.delta * weight), desc(Trend.count)).limit(limit)
     rows = (await session.execute(q)).scalars().all()
     return [
         {

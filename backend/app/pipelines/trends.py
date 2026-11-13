@@ -1,11 +1,11 @@
-"""Simple keyword-based trend detection over time buckets."""
+"""Keyword and phrase trend detection over daily buckets."""
 from __future__ import annotations
 
 import html
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from sqlalchemy import select, delete
@@ -31,6 +31,11 @@ _STOP = (set(ENGLISH_STOP_WORDS) - {"system", "computer"}) | {
     "like", "just", "don", "doesn", "didn", "isn", "way", "lot", "know",
     "really", "want", "need", "think", "make", "thing", "things", "people",
     "good", "better", "going", "time",
+    # academic filler
+    "introduce", "introduces", "effectively", "providing", "provides",
+    "leverages", "exhibits", "demonstrate", "demonstrates", "show", "shows",
+    "achieve", "achieves", "single", "real", "run", "runs", "description",
+    "semantically", "pass", "average", "existing", "recent", "different",
 }
 
 
@@ -41,12 +46,56 @@ def _clean(text: str) -> str:
     return _URL.sub(" ", text)
 
 
-def _tokens(text: str) -> List[str]:
-    out: List[str] = []
+def _singular(word: str) -> str:
+    """Fold plurals so "agents" and "agent" count as one term."""
+    if len(word) > 4 and word.endswith("s") and not word.endswith(("ss", "us", "is", "as")):
+        return word[:-1]
+    return word
+
+
+def _sequence(text: str) -> List[Optional[str]]:
+    """Tokens in order; stopwords/short words become None so phrases can't span them."""
+    out: List[Optional[str]] = []
     for t in _TOKEN.findall(_clean(text)):
-        t = t.lower().rstrip(".-")
-        if len(t) > 2 and t not in _STOP:
-            out.append(t)
+        t = _singular(t.lower().rstrip(".-"))
+        out.append(t if len(t) > 2 and t not in _STOP else None)
+    return out
+
+
+def _tokens(text: str) -> List[str]:
+    return [t for t in _sequence(text) if t]
+
+
+def _terms(text: str) -> List[str]:
+    """Unigrams plus bigrams of adjacent meaningful words ("vector database")."""
+    seq = _sequence(text)
+    terms = [t for t in seq if t]
+    terms += [
+        f"{a} {b}"
+        for a, b in zip(seq, seq[1:])
+        if a and b and a != b
+    ]
+    return terms
+
+
+def _prune_subsumed(counts: Counter, min_phrase: int = 2) -> Counter:
+    """Drop one-off phrases, and words that mostly occur inside a kept phrase.
+
+    Without this "vector" and "database" would both rank next to
+    "vector database", listing the same story three times.
+    """
+    phrases = {t: c for t, c in counts.items() if " " in t and c >= min_phrase}
+    covered: Dict[str, int] = {}
+    for phrase, c in phrases.items():
+        for w in phrase.split():
+            covered[w] = max(covered.get(w, 0), c)
+    out: Counter = Counter()
+    for term, c in counts.items():
+        if " " in term:
+            if term in phrases:
+                out[term] = c
+        elif covered.get(term, 0) < 0.6 * c:
+            out[term] = c
     return out
 
 
@@ -67,7 +116,7 @@ async def compute_daily_trends(
         if not d.published_at:
             continue
         b = _bucket_day(d.published_at)
-        counts.setdefault(b, Counter()).update(_tokens(f"{d.title} {d.content or ''}"))
+        counts.setdefault(b, Counter()).update(_terms(f"{d.title} {d.content or ''}"))
 
     # wipe day buckets we recompute
     await session.execute(delete(Trend).where(Trend.bucket.in_(list(counts.keys()))))
@@ -75,9 +124,17 @@ async def compute_daily_trends(
     buckets_sorted = sorted(counts.keys())
     out: List[Trend] = []
     for i, b in enumerate(buckets_sorted):
-        prev = counts[buckets_sorted[i - 1]] if i > 0 else Counter()
-        for term, c in counts[b].most_common(top_k):
-            delta = float(c - prev.get(term, 0))
+        # Compare with the average of up to a week of earlier days instead of
+        # just yesterday, so one quiet day doesn't make everything "rising".
+        window = [counts[x] for x in buckets_sorted[max(0, i - 7):i]]
+        kept = _prune_subsumed(counts[b])
+        # Phrases are rarer than single words, so rank the two kinds separately
+        # or they would never reach the list.
+        words = [(x, c) for x, c in kept.most_common() if " " not in x][: top_k * 3 // 5]
+        phrases = [(x, c) for x, c in kept.most_common() if " " in x][: top_k * 2 // 5]
+        for term, c in sorted(words + phrases, key=lambda tc: -tc[1]):
+            baseline = sum(w.get(term, 0) for w in window) / len(window) if window else 0.0
+            delta = round(float(c) - baseline, 2)
             t = Trend(bucket=b, term=term, count=int(c), delta=delta)
             session.add(t)
             out.append(t)

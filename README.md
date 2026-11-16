@@ -4,6 +4,8 @@
 
 A 100% free, locally-runnable, full-stack AI platform that scrapes developer/AI signals from across the web, transforms them into a clean structured corpus, generates **local** embeddings, performs **semantic search**, detects **trending topics**, and produces **AI summaries** using **Ollama** — all served through a FastAPI backend and a modern React dashboard.
 
+**[Live demo](https://jammiguelyfish.github.io/ai-trend-intelligence-platform/)** — a static snapshot of real data (no backend). Search examples are precomputed semantic results; other queries fall back to keyword matching in the browser.
+
 > No paid APIs. No OpenAI. No proprietary services. Everything runs locally or via free public endpoints.
 
 ---
@@ -184,3 +186,15 @@ ai-trend-intelligence-platform/
 ## License
 
 MIT
+
+---
+
+## Static demo
+
+The hosted demo is the same React app built with `VITE_DEMO=1`: instead of calling the API it reads JSON files from `frontend/public/demo/`. Refresh the snapshot from your local database with:
+
+```bash
+python -m backend.scripts.export_demo
+```
+
+Pushing the new files to `main` redeploys the site (`.github/workflows/pages.yml`).

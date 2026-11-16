@@ -1,0 +1,1 @@
+[{"id":1,"name":"hackernews","kind":"hackernews","enabled":true},{"id":2,"name":"github","kind":"github","enabled":true},{"id":3,"name":"arxiv","kind":"arxiv","enabled":true},{"id":4,"name":"reddit","kind":"reddit","enabled":true}]

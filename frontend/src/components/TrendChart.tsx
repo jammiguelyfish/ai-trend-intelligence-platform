@@ -19,7 +19,7 @@ export function TrendChart({ items }: { items: TrendItem[] }) {
           <XAxis dataKey="term" tick={{ fontSize: 11 }} interval={0} angle={-30} textAnchor="end" height={60} />
           <YAxis tick={{ fontSize: 11 }} />
           <Tooltip />
-          <Bar dataKey="count" fill="#0ea5e9" />
+          <Bar dataKey="count" fill="#0ea5e9" isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>

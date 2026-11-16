@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { api, SearchResult } from "../api/client";
+import { useEffect } from "react";
+import { api, DEMO, exampleQueries, SearchResult } from "../api/client";
 import { Card } from "../components/Card";
 
 export default function Search() {
@@ -7,17 +8,26 @@ export default function Search() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<Record<number, string>>({});
+  const [examples, setExamples] = useState<string[]>([]);
 
-  async function go(e: React.FormEvent) {
-    e.preventDefault();
-    if (!q.trim()) return;
+  useEffect(() => {
+    if (DEMO) exampleQueries().then(setExamples).catch(() => setExamples([]));
+  }, []);
+
+  async function run(query: string) {
+    if (!query.trim()) return;
     setLoading(true);
     try {
-      const r = await api.search(q, 10);
+      const r = await api.search(query, 10);
       setResults(r.results);
     } finally {
       setLoading(false);
     }
+  }
+
+  function go(e: React.FormEvent) {
+    e.preventDefault();
+    run(q);
   }
 
   async function summarize(id: number) {
@@ -42,6 +52,28 @@ export default function Search() {
         </button>
       </form>
 
+      {DEMO && (
+        <div className="text-xs text-slate-600 space-y-2">
+          <p>
+            Try an example (real semantic search results, precomputed). Other
+            queries use plain keyword matching in your browser, because the
+            embedding model only runs in the full app.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {examples.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => { setQ(ex); run(ex); }}
+                className="border rounded-full px-3 py-1 hover:bg-brand-50"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3">
         {results.map((r) => (
           <Card key={r.id}>
@@ -58,12 +90,14 @@ export default function Search() {
                   <pre className="bg-slate-50 border rounded p-3 text-xs whitespace-pre-wrap mt-3">{summary[r.id]}</pre>
                 )}
               </div>
-              <button
-                onClick={() => summarize(r.id)}
-                className="text-xs border rounded px-2 py-1 hover:bg-brand-50"
-              >
-                Summarize
-              </button>
+              {!DEMO && (
+                <button
+                  onClick={() => summarize(r.id)}
+                  className="text-xs border rounded px-2 py-1 hover:bg-brand-50"
+                >
+                  Summarize
+                </button>
+              )}
             </div>
           </Card>
         ))}

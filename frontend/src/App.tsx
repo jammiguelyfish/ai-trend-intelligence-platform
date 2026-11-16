@@ -4,6 +4,7 @@ import Search from "./pages/Search";
 import Trends from "./pages/Trends";
 import Topics from "./pages/Topics";
 import Sources from "./pages/Sources";
+import { DEMO } from "./api/client";
 
 const navItem =
   "px-3 py-2 rounded-md text-sm font-medium hover:bg-brand-50 hover:text-brand-700";
@@ -26,6 +27,12 @@ export default function App() {
           </nav>
         </div>
       </header>
+      {DEMO && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs text-center px-4 py-2">
+          Static demo: a snapshot of real data collected from Hacker News and arXiv.
+          The full app runs locally with a live pipeline, local embeddings and summaries.
+        </div>
+      )}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6">
         <Routes>
           <Route path="/" element={<Overview />} />

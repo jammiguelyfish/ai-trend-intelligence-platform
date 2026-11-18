@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { api, TopicItem } from "../api/client";
 import { Card } from "../components/Card";
 
+const MISC_LABEL = "Miscellaneous";
+
 export default function Topics() {
   const [topics, setTopics] = useState<TopicItem[]>([]);
   useEffect(() => {
@@ -12,7 +14,10 @@ export default function Topics() {
     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
       {topics.map((t) => (
         <Card key={t.id} title={t.label}>
-          <div className="text-xs text-slate-500 mb-2">{t.size} documents</div>
+          <div className="text-xs text-slate-500 mb-2">
+            {t.size} documents
+            {t.label === MISC_LABEL && " · short posts with no common theme"}
+          </div>
           <ul className="mb-3 space-y-1 text-sm text-slate-700">
             {t.examples.map((e) => (
               <li key={e.id} className="line-clamp-2">

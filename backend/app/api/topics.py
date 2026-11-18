@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.api.deps import db_session
 from backend.app.models import Document, DocumentTopic, Topic
+from backend.app.pipelines.topics import MISC_LABEL
 
 router = APIRouter(prefix="/topics", tags=["topics"])
 
@@ -34,4 +35,6 @@ async def list_topics(session: AsyncSession = Depends(db_session)) -> list[dict]
                 "examples": [{"id": i, "title": ti, "url": u} for i, ti, u in examples],
             }
         )
+    # the grab bag goes last however large it is
+    out.sort(key=lambda t: (t["label"] == MISC_LABEL, -t["size"]))
     return out

@@ -17,6 +17,12 @@ from backend.app.utils.logging import get_logger
 
 log = get_logger(__name__)
 
+MISC_LABEL = "Miscellaneous"
+# Mean similarity to the cluster centre below which a cluster is a grab bag
+# rather than a topic. On the sample data, real topics sit at 0.46-0.71 and the
+# grab bags (mostly title-only Hacker News posts) at 0.30-0.37.
+MIN_COHESION = 0.4
+
 
 def cluster_embeddings(
     X: np.ndarray, docs_per_topic: int = 50, max_topics: int = 20
@@ -40,13 +46,20 @@ def cluster_embeddings(
 
 
 def label_clusters(
-    doc_terms: Sequence[Sequence[str]], labels: Sequence[int], top_n: int = 8
+    doc_terms: Sequence[Sequence[str]],
+    labels: Sequence[int],
+    top_n: int = 8,
+    min_lift: float = 2.0,
 ) -> Dict[int, List[str]]:
     """Distinctive keywords per cluster (TF-IDF over clusters).
 
     A term scores high when it appears in many documents of the cluster but in
     few documents overall, so corpus-wide words ("model") lose to what actually
     sets the cluster apart ("diffusion model", "image generation").
+
+    A term must also be at least ``min_lift`` times more common inside the
+    cluster than in the whole corpus. Without this, filler such as "user",
+    "system" or "building" slips in when the cluster has nothing sharper.
     """
     n = len(doc_terms)
     global_df: Counter = Counter()
@@ -64,12 +77,37 @@ def label_clusters(
             {
                 term: (c / len(members)) * math.log(1 + n / global_df[term])
                 for term, c in df.items()
-                if c >= need
+                if c >= need and (c / len(members)) * n / global_df[term] >= min_lift
             }
         )
         kept = _prune_subsumed(scored, min_phrase=0)
         out[cid] = [w for w, _ in kept.most_common(top_n)]
     return out
+
+
+def merge_incoherent(
+    labels: Sequence[int], sims: Sequence[float], min_cohesion: float = MIN_COHESION
+):
+    """Fold clusters that are not tight around their centre into one grab bag.
+
+    Returns ``(labels, misc_id)``; ``misc_id`` is None when every cluster is
+    coherent. Short, title-only posts embed poorly and k-means gathers them into
+    several loose clusters that no keyword can describe; one honest
+    "Miscellaneous" topic is clearer than several mislabelled ones.
+    """
+    labels = np.asarray(labels)
+    sims = np.asarray(sims)
+    loose = [
+        c
+        for c in sorted(set(labels.tolist()) - {-1})
+        if sims[labels == c].mean() < min_cohesion
+    ]
+    if not loose:
+        return labels, None
+    misc_id = int(labels.max()) + 1
+    merged = labels.copy()
+    merged[np.isin(labels, loose)] = misc_id
+    return merged, misc_id
 
 
 def centroid_scores(X: np.ndarray, labels: Sequence[int]) -> np.ndarray:
@@ -114,6 +152,7 @@ async def cluster_topics(
 
     doc_terms = [_terms(t) for t in texts]
     sims = centroid_scores(X, labels)
+    labels, misc_id = merge_incoherent(labels, sims)
     keywords_by_cluster = label_clusters(doc_terms, labels)
 
     out: List[Topic] = []
@@ -122,7 +161,9 @@ async def cluster_topics(
             continue
         members = [(d, float(s)) for d, l, s in zip(docs, labels, sims) if l == cid]
         keywords = keywords_by_cluster.get(cid, [])
-        label = ", ".join(keywords[:3]) or f"topic-{cid}"
+        label = (
+            MISC_LABEL if cid == misc_id else ", ".join(keywords[:3]) or f"topic-{cid}"
+        )
         topic = Topic(
             label=label[:256],
             keywords=", ".join(keywords)[:1024],

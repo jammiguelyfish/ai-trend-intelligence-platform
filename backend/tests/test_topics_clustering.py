@@ -48,3 +48,30 @@ def test_centroid_scores_rank_central_points_first_and_ignore_noise():
     s = centroid_scores(X, [0, 0, 0, -1])
     assert s[3] == 0.0
     assert s[1] > s[0] and s[1] > s[2]  # middle point is closest to the centre
+
+
+def test_label_clusters_drops_filler_that_is_not_over_represented():
+    from backend.app.pipelines.topics import label_clusters
+
+    # "system" is in every document of both clusters: lift 1, so never a keyword
+    docs = [["system", "gpu", "vram"]] * 6 + [["system", "poem", "rhyme"]] * 6
+    kw = label_clusters(docs, [0] * 6 + [1] * 6)
+    assert "system" not in kw[0] and "system" not in kw[1]
+    assert "gpu" in kw[0] and "poem" in kw[1]
+
+
+def test_merge_incoherent_folds_loose_clusters_into_one_misc_topic():
+    from backend.app.pipelines.topics import merge_incoherent
+
+    labels = [0, 0, 1, 1, 2, 2, 3, 3]
+    sims = [0.9, 0.9, 0.3, 0.3, 0.9, 0.9, 0.2, 0.2]  # clusters 1 and 3 are loose
+    merged, misc = merge_incoherent(labels, sims, min_cohesion=0.4)
+    assert misc is not None
+    assert list(merged) == [0, 0, misc, misc, 2, 2, misc, misc]
+
+
+def test_merge_incoherent_leaves_tight_clusters_alone():
+    from backend.app.pipelines.topics import merge_incoherent
+
+    merged, misc = merge_incoherent([0, 0, 1, 1], [0.8, 0.8, 0.7, 0.7])
+    assert misc is None and list(merged) == [0, 0, 1, 1]
